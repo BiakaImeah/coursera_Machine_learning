@@ -1,0 +1,123 @@
+#  Practical Machine Learning Assignment
+
+Author: Biaka Imeah
+
+Date: 17/04/2021
+
+## Overview
+In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+## Data Processing
+
+```{r}
+
+library(knitr)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+library(corrplot)
+library(caret)
+
+set.seed(12345)
+
+## set the URL for the download
+url_train <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+url_test <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+
+#download the datasets
+training <- read.csv(url(url_train))
+testing  <- read.csv(url(url_test))
+
+# create a partition with the training dataset 
+inTrain  <- createDataPartition(training$classe, p=0.7, list=FALSE)
+TrainSet <- training[inTrain, ]
+TestSet  <- training[-inTrain, ]
+##head(TrainSet)
+##head(TestSet)
+dim(TrainSet)
+dim(TestSet)
+```
+
+## Data Cleaning and Pre-processing
+
+The training and testing datasets have 160 variables with variables having a lot of NAs. The NA would be removed with the pre-processing approach below. The Near Zero variance (NZV) variables and ID variables are removed as well.
+
+```{r}
+NZV <- nearZeroVar(TrainSet)
+TrainSet <- TrainSet[, -NZV]
+TestSet  <- TestSet[, -NZV]
+dim(TrainSet)
+dim(TestSet)
+
+## Removing  variables that are mostly NAs
+AllNA    <- sapply(TrainSet, function(x) mean(is.na(x))) > 0.95
+TrainSet <- TrainSet[, AllNA==FALSE]
+TestSet  <- TestSet[, AllNA==FALSE]
+
+### Remove ID variables
+TrainSet <- TrainSet[, -(1:5)]
+TestSet  <- TestSet[, -(1:5)]
+dim(TrainSet)
+dim(TestSet)
+```
+
+## Correlation Analysis
+Determine correlation among variables before proceeding to developing the prediction model.
+
+```{r}
+corMatrix <- cor(TrainSet[, -54])
+corrplot(corMatrix, order = "FPC", method = "circle", type = "upper", 
+         tl.cex = 0.5)
+```
+
+The highly correlated variables are shown in dark colors in the graph above. The PCA approach wouldn't be utilized becuase the correlation are few. Hence, I will proceed to model development.
+
+## Prediction Modelling
+
+Two methods will be applied to model the regressions (in the Train dataset) and the best one (with higher accuracy when applied to the Test dataset). The methods are: Random Forests and Decision Tree, as described below. A Confusion Matrix is plotted at the end of each analysis to better visualize the accuracy of the models.
+
+### 1. Random Forest Model
+
+```{r}
+# model fit
+set.seed(12345)
+controlRF <- trainControl(method="cv", number=3, verboseIter=FALSE)
+modFitRandForest <- train(classe ~ ., data=TrainSet, method="rf",
+                          trControl=controlRF)
+modFitRandForest$finalModel
+
+# prediction on Test dataset
+predictRandForest <- predict(modFitRandForest, newdata=TestSet)
+confMatRandForest <- confusionMatrix(factor(predictRandForest), factor(TestSet$classe))
+confMatRandForest
+```
+
+### 2. Decision Tree
+
+```{r}
+# model fit
+set.seed(12345)
+modFitDecTree <- rpart(classe ~ ., data=TrainSet, method="class")
+fancyRpartPlot(modFitDecTree)
+# prediction on Test dataset
+predictDecTree <- predict(modFitDecTree, newdata=TestSet, type="class")
+confMatDecTree <- confusionMatrix(factor(predictDecTree), factor(TestSet$classe))
+confMatDecTree
+```
+
+## Applying choosen model to test data
+
+The accuracy of the random forest model and decision tree model are:
+
+Random forest: 0.999
+
+Decision Tree: 0.7342
+
+The accuracy of the random forest model suggest that the model performs better than the decision tree model. Therefore, the decision tree model is apply to  the test data.
+
+```{r}
+predictTEST <- predict(modFitRandForest, newdata=testing)
+predictTEST
+```
